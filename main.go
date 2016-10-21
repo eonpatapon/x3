@@ -13,6 +13,8 @@ import (
 	"github.com/urfave/cli"
 )
 
+var ErrWorkspaceNotFound = errors.New("No workspace found")
+
 func getStdin(c cli.Args) string {
 	var res string
 	fi, _ := os.Stdin.Stat()
@@ -144,8 +146,7 @@ func (i3 *I3) GetWSNum(num int32) (i3ipc.Workspace, error) {
 			return ws, nil
 		}
 	}
-	var ws i3ipc.Workspace
-	return ws, errors.New("No workspace found")
+	return i3ipc.Workspace{}, ErrWorkspaceNotFound
 }
 
 func (i3 *I3) GetWSName(name string) (i3ipc.Workspace, error) {
@@ -154,24 +155,23 @@ func (i3 *I3) GetWSName(name string) (i3ipc.Workspace, error) {
 			return ws, nil
 		}
 	}
-	var ws i3ipc.Workspace
-	return ws, errors.New("No workspace found")
+	return i3ipc.Workspace{}, ErrWorkspaceNotFound
 }
 
 func (i3 *I3) GetWS(nameOrNum string) (i3ipc.Workspace, error) {
 	var ws i3ipc.Workspace
 	num, err := strconv.ParseInt(nameOrNum, 10, 32)
 	if err != nil {
-		ws, _ = i3.GetWSName(nameOrNum)
+		ws, err = i3.GetWSName(nameOrNum)
 	} else {
-		ws, _ = i3.GetWSNum(int32(num))
+		ws, err = i3.GetWSNum(int32(num))
 	}
 
-	var e error
-	if ws.Name == "" && ws.Num == 0 {
-		e = errors.New("Can't find WS " + nameOrNum)
+	if err != nil {
+		return i3ipc.Workspace{}, err
 	}
-	return ws, e
+
+	return ws, nil
 }
 
 func (i3 *I3) CurrentWS() (i3ipc.Workspace, error) {
@@ -180,8 +180,7 @@ func (i3 *I3) CurrentWS() (i3ipc.Workspace, error) {
 			return ws, nil
 		}
 	}
-	var ws i3ipc.Workspace
-	return ws, errors.New("Failed to get current workspace")
+	return i3ipc.Workspace{}, ErrWorkspaceNotFound
 }
 
 func (i3 *I3) OutputWS(output string) (i3ipc.Workspace, error) {
@@ -190,8 +189,7 @@ func (i3 *I3) OutputWS(output string) (i3ipc.Workspace, error) {
 			return ws, nil
 		}
 	}
-	var ws i3ipc.Workspace
-	return ws, errors.New("Failed to get output workspace")
+	return i3ipc.Workspace{}, ErrWorkspaceNotFound
 }
 
 func (i3 *I3) ActiveOutputs() ([]i3ipc.Output, error) {
