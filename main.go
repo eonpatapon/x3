@@ -243,6 +243,13 @@ func (c *I3CmdChain) SwapWS(ws1 i3ipc.Workspace, ws2 i3ipc.Workspace) {
 	c.FocusOutput(ws1.Output)
 }
 
+func (c *I3CmdChain) ShowWSOnOutput(ws i3ipc.Workspace, output string) {
+	c.ShowWS(ws)
+	if ws.Output != output {
+		c.MoveWSToOuput(output)
+	}
+}
+
 func WSName(ws i3ipc.Workspace) string {
 	var name string
 	splitName := strings.Split(ws.Name, ":")
@@ -280,10 +287,7 @@ func Show(wsName string) {
 		i3.chain.SwapWS(currentWS, targetWS)
 	} else {
 		// bring workspace to output
-		i3.chain.ShowWS(targetWS)
-		if targetWS.Output != currentWS.Output {
-			i3.chain.MoveWSToOuput(currentWS.Output)
-		}
+		i3.chain.ShowWSOnOutput(targetWS, currentWS.Output)
 		// make WS history correct
 		i3.chain.ShowWS(currentWS)
 		i3.chain.ShowWS(targetWS)
