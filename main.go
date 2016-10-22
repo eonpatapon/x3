@@ -10,8 +10,11 @@ import (
 	"strings"
 
 	"github.com/jawher/mow.cli"
+	"github.com/op/go-logging"
 	"github.com/proxypoke/i3ipc"
 )
+
+var log = logging.MustGetLogger("x3")
 
 var ErrWorkspaceNotFound = errors.New("No workspace found")
 var ErrArgParseFailed = errors.New("Failed to parse args")
@@ -65,6 +68,21 @@ func getStdin(cliArgs []string) []string {
 func main() {
 	x3 := cli.App("x3", "XMonad workspace handling and more for i3-wm")
 	x3.Version("v version", "0.1")
+
+	debug := x3.Bool(cli.BoolOpt{
+		Name:  "debug",
+		Value: false,
+		Desc:  "Enable debug logs",
+	})
+
+	x3.Before = func() {
+		if *debug {
+			backend := logging.NewLogBackend(os.Stderr, "", 0)
+			backendLevel := logging.AddModuleLevel(backend)
+			backendLevel.SetLevel(logging.DEBUG, "")
+			logging.SetBackend(backend)
+		}
+	}
 
 	x3.Command("show", "Show or create workspace on focused screen", func(cmd *cli.Cmd) {
 		wsName := cmd.StringArg("WSNAME", "", "Workspace name")
@@ -155,7 +173,9 @@ type I3 struct {
 }
 
 func (i3 *I3) RunChain() {
-	i3.s.Command(strings.Join(*i3.chain, ";"))
+	cmd := strings.Join(*i3.chain, ";")
+	log.Debugf("Run: %s", cmd)
+	i3.s.Command(cmd)
 }
 
 func (i3 *I3) GetWSNum(num int32) (i3ipc.Workspace, error) {
@@ -226,6 +246,7 @@ func (i3 *I3) ActiveOutputs() ([]i3ipc.Output, error) {
 type I3CmdChain []string
 
 func (c *I3CmdChain) Add(cmd string) {
+	log.Debugf("Add cmd: %s", cmd)
 	*c = append(*c, cmd)
 }
 
