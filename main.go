@@ -9,8 +9,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/jawher/mow.cli"
 	"github.com/proxypoke/i3ipc"
-	"github.com/urfave/cli"
 )
 
 var ErrWorkspaceNotFound = errors.New("No workspace found")
@@ -46,135 +46,88 @@ func inverse(d Direction) Direction {
 	return Direction("")
 }
 
-func getStdin(c cli.Args) ([]string, error) {
-	var args = make([]string, 0)
+func getStdin(cliArgs []string) []string {
 	fi, _ := os.Stdin.Stat()
-	if fi.Mode()&os.ModeNamedPipe == 0 {
-		return append(args, c...), nil
-	} else {
+	if fi.Mode()&os.ModeNamedPipe != 0 {
 		reader := bufio.NewReader(os.Stdin)
 		res, err := reader.ReadString('\n')
 		if err != nil {
-			return args, err
+			return cliArgs
 		}
 		res = strings.TrimSpace(res)
 		for _, arg := range strings.Split(res, " ") {
-			args = append(args, arg)
+			cliArgs = append(cliArgs, arg)
 		}
-		return args, nil
 	}
-	return args, ErrArgParseFailed
+	return cliArgs
 }
 
 func main() {
-	app := cli.NewApp()
-	app.Name = "x3"
-	app.Usage = "XMonad workspace handling for i3-wm"
-	app.Authors = []cli.Author{
-		cli.Author{
-			Name:  "Jean-Philippe Braun",
-			Email: "eon@patapon.info",
-		},
-	}
-	app.Version = "0.1"
-	app.Commands = []cli.Command{
-		{
-			Name: "show",
-			Action: func(c *cli.Context) error {
-				wsName, err := getStdin(c.Args())
-				if err != nil {
-					return err
-				}
-				if wsName[0] != "" {
-					Show(wsName[0])
-				}
-				return nil
-			},
-			Usage: "Show or create workspace on focused screen",
-		},
-		{
-			Name: "rename",
-			Action: func(c *cli.Context) error {
-				wsName, err := getStdin(c.Args())
-				if err != nil {
-					return err
-				}
-				if wsName[0] != "" {
-					Rename(wsName[0])
-				}
-				return nil
-			},
-			Usage: "Rename current workspace",
-		},
-		{
-			Name: "bind",
-			Action: func(c *cli.Context) error {
-				wsNum, err := getStdin(c.Args())
-				if err != nil {
-					return err
-				}
-				if wsNum[0] != "" {
-					Bind(wsNum[0])
-				}
-				return nil
-			},
-			Usage: "Bind current workspace to num",
-		},
-		{
-			Name: "swap",
-			Action: func(c *cli.Context) error {
-				Swap()
-				return nil
-			},
-			Usage: "Swap visible workspaces when there is 2 screens",
-		},
-		{
-			Name: "list",
-			Action: func(c *cli.Context) error {
-				List()
-				return nil
-			},
-			Usage: "List all workspace names",
-		},
-		{
-			Name: "current",
-			Action: func(c *cli.Context) error {
-				Current()
-				return nil
-			},
-			Usage: "Current workspace name",
-		},
-		{
-			Name: "move",
-			Action: func(c *cli.Context) error {
-				wsNum, err := getStdin(c.Args())
-				if err != nil {
-					return err
-				}
-				if wsNum[0] != "" {
-					Move(wsNum[0])
-				}
-				return nil
-			},
-			Usage: "Move current container to workspace",
-		},
-		{
-			Name: "merge",
-			Action: func(c *cli.Context) error {
-				args, err := getStdin(c.Args())
-				if err != nil {
-					return err
-				}
-				if len(args) != 3 {
-					return errors.New("Wrong number of arguments")
-				}
-				Merge(Direction(args[0]), Orientation(args[1]), Layout(args[2]))
-				return nil
-			},
-			Usage: "Merge current container into other container",
-		},
-	}
-	app.Run(os.Args)
+	x3 := cli.App("x3", "XMonad workspace handling and more for i3-wm")
+	x3.Version("v version", "0.1")
+
+	x3.Command("show", "Show or create workspace on focused screen", func(cmd *cli.Cmd) {
+		wsName := cmd.StringArg("WSNAME", "", "Workspace name")
+
+		cmd.Action = func() {
+			Show(*wsName)
+		}
+	})
+
+	x3.Command("rename", "Rename current workspace", func(cmd *cli.Cmd) {
+		wsName := cmd.StringArg("WSNAME", "", "New workspace name")
+
+		cmd.Action = func() {
+			Rename(*wsName)
+		}
+	})
+
+	x3.Command("bind", "Bind current workspace to num", func(cmd *cli.Cmd) {
+		num := cmd.StringArg("NUM", "", "")
+
+		cmd.Action = func() {
+			Bind(*num)
+		}
+	})
+
+	x3.Command("swap", "Swap visible workspaces when there is 2 screens", func(cmd *cli.Cmd) {
+		cmd.Action = func() {
+			Swap()
+		}
+	})
+
+	x3.Command("list", "List all workspace names", func(cmd *cli.Cmd) {
+		cmd.Action = func() {
+			List()
+		}
+	})
+
+	x3.Command("current", "Current workspace name", func(cmd *cli.Cmd) {
+		cmd.Action = func() {
+			Current()
+		}
+	})
+
+	x3.Command("move", "Move current container to workspace", func(cmd *cli.Cmd) {
+		ws := cmd.StringArg("NUM_OR_NAME", "", "")
+
+		cmd.Action = func() {
+			Move(*ws)
+		}
+	})
+
+	x3.Command("merge", "Merge current container into other container", func(cmd *cli.Cmd) {
+		d := cmd.StringArg("DIRECTION", "", "The direction where to merge (left/right/up/down)")
+		o := cmd.StringArg("ORIENTATION", "", "Split mode (horizontal/vertical)")
+		l := cmd.StringArg("LAYOUT", "", "Layout type to use (default/tabbed/stacking)")
+
+		cmd.Action = func() {
+			Merge(Direction(*d), Orientation(*o), Layout(*l))
+		}
+	})
+
+	args := getStdin(os.Args)
+	x3.Run(args)
 }
 
 type I3WS []i3ipc.Workspace
