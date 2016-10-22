@@ -75,7 +75,7 @@ Example conf:
 x3 merge
 --------
 
-Merge the current container into anthoer container.
+Merge the current container into another non splited container.
 
 Usage:
 
