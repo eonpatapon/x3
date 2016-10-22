@@ -71,3 +71,13 @@ Example conf:
     [...]
 
     bindsym $mod+m exec x3 list | dmenu | x3 move
+
+x3 merge
+--------
+
+Merge the current container into anthoer container.
+
+Usage:
+
+    x3 merge left vertical default
+    x3 merge right vertical stacking

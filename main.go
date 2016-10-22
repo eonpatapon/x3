@@ -14,18 +14,56 @@ import (
 )
 
 var ErrWorkspaceNotFound = errors.New("No workspace found")
+var ErrArgParseFailed = errors.New("Failed to parse args")
 
-func getStdin(c cli.Args) string {
-	var res string
+type Direction string
+type Orientation string
+type Layout string
+
+const (
+	Left       = Direction("left")
+	Right      = Direction("right")
+	Up         = Direction("up")
+	Down       = Direction("down")
+	Horizontal = Orientation("horizontal")
+	Vertical   = Orientation("vertical")
+	Default    = Layout("default")
+	Tabbed     = Layout("tabbed")
+	Stacking   = Layout("stacking")
+)
+
+func inverse(d Direction) Direction {
+	switch d {
+	case Left:
+		return Right
+	case Right:
+		return Left
+	case Up:
+		return Down
+	case Down:
+		return Up
+	}
+	return Direction("")
+}
+
+func getStdin(c cli.Args) ([]string, error) {
+	var args = make([]string, 0)
 	fi, _ := os.Stdin.Stat()
 	if fi.Mode()&os.ModeNamedPipe == 0 {
-		res = c.First()
+		return append(args, c...), nil
 	} else {
 		reader := bufio.NewReader(os.Stdin)
-		res, _ = reader.ReadString('\n')
+		res, err := reader.ReadString('\n')
+		if err != nil {
+			return args, err
+		}
 		res = strings.TrimSpace(res)
+		for _, arg := range strings.Split(res, " ") {
+			args = append(args, arg)
+		}
+		return args, nil
 	}
-	return res
+	return args, ErrArgParseFailed
 }
 
 func main() {
@@ -43,9 +81,12 @@ func main() {
 		{
 			Name: "show",
 			Action: func(c *cli.Context) error {
-				wsName := getStdin(c.Args())
-				if wsName != "" {
-					Show(wsName)
+				wsName, err := getStdin(c.Args())
+				if err != nil {
+					return err
+				}
+				if wsName[0] != "" {
+					Show(wsName[0])
 				}
 				return nil
 			},
@@ -54,9 +95,12 @@ func main() {
 		{
 			Name: "rename",
 			Action: func(c *cli.Context) error {
-				wsName := getStdin(c.Args())
-				if wsName != "" {
-					Rename(wsName)
+				wsName, err := getStdin(c.Args())
+				if err != nil {
+					return err
+				}
+				if wsName[0] != "" {
+					Rename(wsName[0])
 				}
 				return nil
 			},
@@ -65,9 +109,12 @@ func main() {
 		{
 			Name: "bind",
 			Action: func(c *cli.Context) error {
-				wsNum := getStdin(c.Args())
-				if wsNum != "" {
-					Bind(wsNum)
+				wsNum, err := getStdin(c.Args())
+				if err != nil {
+					return err
+				}
+				if wsNum[0] != "" {
+					Bind(wsNum[0])
 				}
 				return nil
 			},
@@ -100,13 +147,31 @@ func main() {
 		{
 			Name: "move",
 			Action: func(c *cli.Context) error {
-				wsNum := getStdin(c.Args())
-				if wsNum != "" {
-					Move(wsNum)
+				wsNum, err := getStdin(c.Args())
+				if err != nil {
+					return err
+				}
+				if wsNum[0] != "" {
+					Move(wsNum[0])
 				}
 				return nil
 			},
 			Usage: "Move current container to workspace",
+		},
+		{
+			Name: "merge",
+			Action: func(c *cli.Context) error {
+				args, err := getStdin(c.Args())
+				if err != nil {
+					return err
+				}
+				if len(args) != 3 {
+					return errors.New("Wrong number of arguments")
+				}
+				Merge(Direction(args[0]), Orientation(args[1]), Layout(args[2]))
+				return nil
+			},
+			Usage: "Merge current container into other container",
 		},
 	}
 	app.Run(os.Args)
@@ -212,28 +277,19 @@ func (c *I3CmdChain) Add(cmd string) {
 }
 
 func (c *I3CmdChain) ShowWS(ws i3ipc.Workspace) {
-	fmt.Printf("Show %v\n", ws)
 	c.Add("workspace " + string(ws.Name))
 }
 
 func (c *I3CmdChain) RenameWS(wsName string) {
-	fmt.Printf("Rename to %v\n", wsName)
 	c.Add("rename workspace to " + wsName)
 }
 
 func (c *I3CmdChain) MoveWSToOuput(output string) {
-	fmt.Printf("Move WS to %v\n", output)
 	c.Add("move workspace to output " + output)
 }
 
 func (c *I3CmdChain) FocusOutput(output string) {
-	fmt.Printf("Focus %v\n", output)
 	c.Add("focus output " + output)
-}
-
-func (c *I3CmdChain) MoveToWS(wsName string) {
-	fmt.Printf("Move container to %v\n", wsName)
-	c.Add("move container to workspace " + wsName)
 }
 
 func (c *I3CmdChain) SwapWS(ws1 i3ipc.Workspace, ws2 i3ipc.Workspace) {
@@ -248,6 +304,26 @@ func (c *I3CmdChain) ShowWSOnOutput(ws i3ipc.Workspace, output string) {
 	if ws.Output != output {
 		c.MoveWSToOuput(output)
 	}
+}
+
+func (c *I3CmdChain) MoveContainerToWS(wsName string) {
+	c.Add("move container to workspace " + wsName)
+}
+
+func (c *I3CmdChain) FocusContainer(d Direction) {
+	c.Add(fmt.Sprintf("focus %s", d))
+}
+
+func (c *I3CmdChain) SplitContainer(o Orientation) {
+	c.Add(fmt.Sprintf("split %s", o))
+}
+
+func (c *I3CmdChain) MoveContainer(d Direction) {
+	c.Add(fmt.Sprintf("move %s", d))
+}
+
+func (c *I3CmdChain) ChangeLayout(l Layout) {
+	c.Add(fmt.Sprintf("layout %s", l))
 }
 
 func WSName(ws i3ipc.Workspace) string {
@@ -382,9 +458,19 @@ func Move(wsName string) {
 	ws, err := i3.GetWS(wsName)
 	// new workspace
 	if err != nil {
-		i3.chain.MoveToWS(wsName)
+		i3.chain.MoveContainerToWS(wsName)
 	} else {
-		i3.chain.MoveToWS(ws.Name)
+		i3.chain.MoveContainerToWS(ws.Name)
 	}
+	i3.RunChain()
+}
+
+func Merge(d Direction, o Orientation, l Layout) {
+	i3 := Init()
+	i3.chain.FocusContainer(d)
+	i3.chain.SplitContainer(o)
+	i3.chain.FocusContainer(inverse(d))
+	i3.chain.MoveContainer(d)
+	i3.chain.ChangeLayout(l)
 	i3.RunChain()
 }
